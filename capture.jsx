@@ -87,7 +87,11 @@ const Capture = ({ audioUrl, audioDuration, onComplete, onBack }) => {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
-        const { Pose } = await import("@mediapipe/pose");
+        const MP = await import("@mediapipe/pose");
+        const Pose = MP.Pose;
+        if (!Pose || typeof Pose !== "function") {
+          throw new Error("Pose class definition is missing or invalid after module import.");
+        }
         const pose = new Pose({
           locateFile: (file) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
@@ -177,38 +181,38 @@ const Capture = ({ audioUrl, audioDuration, onComplete, onBack }) => {
     /* @__PURE__ */ jsxDEV("div", { className: "capture-header", children: [
       /* @__PURE__ */ jsxDEV("button", { onClick: onBack, className: "back-btn", children: "\u2190 Back" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 203,
+        lineNumber: 211,
         columnNumber: 9
       }),
       /* @__PURE__ */ jsxDEV("h2", { children: "Recording" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 206,
+        lineNumber: 214,
         columnNumber: 9
       }),
       /* @__PURE__ */ jsxDEV("div", {}, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 207,
+        lineNumber: 215,
         columnNumber: 9
       })
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 202,
+      lineNumber: 210,
       columnNumber: 7
     }),
     cameraError ? /* @__PURE__ */ jsxDEV("div", { className: "error-message", children: [
       /* @__PURE__ */ jsxDEV("p", { children: cameraError }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 212,
+        lineNumber: 220,
         columnNumber: 11
       }),
       /* @__PURE__ */ jsxDEV("button", { onClick: onBack, className: "secondary-btn", style: { marginTop: "1rem" }, children: "Go back" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 213,
+        lineNumber: 221,
         columnNumber: 11
       })
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 211,
+      lineNumber: 219,
       columnNumber: 9
     }) : /* @__PURE__ */ jsxDEV(Fragment, { children: [
       /* @__PURE__ */ jsxDEV("div", { className: "camera-container", children: [
@@ -224,7 +228,7 @@ const Capture = ({ audioUrl, audioDuration, onComplete, onBack }) => {
           false,
           {
             fileName: "<stdin>",
-            lineNumber: 220,
+            lineNumber: 228,
             columnNumber: 13
           }
         ),
@@ -240,65 +244,65 @@ const Capture = ({ audioUrl, audioDuration, onComplete, onBack }) => {
           false,
           {
             fileName: "<stdin>",
-            lineNumber: 226,
+            lineNumber: 234,
             columnNumber: 13
           }
         ),
         countdown > 0 && /* @__PURE__ */ jsxDEV("div", { className: "countdown-overlay", children: /* @__PURE__ */ jsxDEV("div", { className: "countdown-number", children: countdown }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 235,
+          lineNumber: 243,
           columnNumber: 17
         }) }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 234,
+          lineNumber: 242,
           columnNumber: 15
         }),
         isRecording && /* @__PURE__ */ jsxDEV("div", { className: "recording-indicator", children: [
           /* @__PURE__ */ jsxDEV("span", { className: "rec-dot" }, void 0, false, {
             fileName: "<stdin>",
-            lineNumber: 241,
+            lineNumber: 249,
             columnNumber: 17
           }),
           "REC"
         ] }, void 0, true, {
           fileName: "<stdin>",
-          lineNumber: 240,
+          lineNumber: 248,
           columnNumber: 15
         })
       ] }, void 0, true, {
         fileName: "<stdin>",
-        lineNumber: 219,
+        lineNumber: 227,
         columnNumber: 11
       }),
       /* @__PURE__ */ jsxDEV("audio", { ref: audioRef, src: audioUrl }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 247,
+        lineNumber: 255,
         columnNumber: 11
       }),
       /* @__PURE__ */ jsxDEV("div", { className: "capture-info", children: [
         /* @__PURE__ */ jsxDEV("p", { children: "Get ready! The music will start after countdown." }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 250,
+          lineNumber: 258,
           columnNumber: 13
         }),
         /* @__PURE__ */ jsxDEV("p", { children: "Move your body to the beat!" }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 251,
+          lineNumber: 259,
           columnNumber: 13
         })
       ] }, void 0, true, {
         fileName: "<stdin>",
-        lineNumber: 249,
+        lineNumber: 257,
         columnNumber: 11
       })
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 218,
+      lineNumber: 226,
       columnNumber: 9
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 201,
+    lineNumber: 209,
     columnNumber: 5
   });
 };
