@@ -1,5 +1,5 @@
-import { jsxDEV } from "react/jsx-dev-runtime";
-import React, { useRef, useEffect, useState } from "react";
+import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 const Capture = ({ audioUrl, audioDuration, onComplete, onBack }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -7,98 +7,10 @@ const Capture = ({ audioUrl, audioDuration, onComplete, onBack }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [poseDetector, setPoseDetector] = useState(null);
   const [recordedPoses, setRecordedPoses] = useState([]);
+  const [cameraError, setCameraError] = useState(null);
   const audioRef = useRef(null);
   const startTimeRef = useRef(null);
   const animationFrameRef = useRef(null);
-  useEffect(() => {
-    let stream = null;
-    const setupCamera = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, facingMode: "user" },
-          audio: false
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-        const { Pose } = await import("@mediapipe/pose");
-        const pose = new Pose({
-          locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
-          }
-        });
-        pose.setOptions({
-          modelComplexity: 1,
-          smoothLandmarks: true,
-          enableSegmentation: false,
-          smoothSegmentation: false,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        });
-        await pose.initialize();
-        setPoseDetector(pose);
-      } catch (error) {
-        console.error("Error setting up camera:", error);
-        alert("Camera access denied. Please allow camera access.");
-      }
-    };
-    setupCamera();
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, []);
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1e3);
-      return () => clearTimeout(timer);
-    } else if (countdown === 0 && !isRecording && poseDetector) {
-      startRecording();
-    }
-  }, [countdown, isRecording, poseDetector]);
-  const startRecording = () => {
-    setIsRecording(true);
-    startTimeRef.current = Date.now();
-    if (audioRef.current) {
-      audioRef.current.play();
-    }
-    detectPose();
-  };
-  const detectPose = async () => {
-    if (!isRecording || !videoRef.current || !poseDetector) return;
-    const currentTime = (Date.now() - startTimeRef.current) / 1e3;
-    if (currentTime >= audioDuration) {
-      stopRecording();
-      return;
-    }
-    try {
-      await poseDetector.send({ image: videoRef.current });
-      poseDetector.onResults((results) => {
-        if (results.poseLandmarks) {
-          setRecordedPoses((prev) => [
-            ...prev,
-            {
-              time: currentTime,
-              landmarks: results.poseLandmarks
-            }
-          ]);
-          const canvas = canvasRef.current;
-          const ctx = canvas.getContext("2d");
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-          drawPose(ctx, results.poseLandmarks, canvas.width, canvas.height);
-        }
-      });
-    } catch (error) {
-      console.error("Pose detection error:", error);
-    }
-    animationFrameRef.current = requestAnimationFrame(detectPose);
-  };
   const drawPose = (ctx, landmarks, width, height) => {
     const connections = [
       [11, 12],
@@ -141,6 +53,116 @@ const Capture = ({ audioUrl, audioDuration, onComplete, onBack }) => {
       ctx.fill();
     });
   };
+  const handlePoseResults = useCallback((results) => {
+    if (!isRecording || !startTimeRef.current) return;
+    const currentTime = (Date.now() - startTimeRef.current) / 1e3;
+    if (results.poseLandmarks) {
+      setRecordedPoses((prev) => [
+        ...prev,
+        {
+          time: currentTime,
+          landmarks: results.poseLandmarks
+        }
+      ]);
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (videoRef.current) {
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        }
+        drawPose(ctx, results.poseLandmarks, canvas.width, canvas.height);
+      }
+    }
+  }, [isRecording]);
+  useEffect(() => {
+    let stream = null;
+    const setupCamera = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480, facingMode: "user" },
+          audio: false
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        const { Pose } = await import("@mediapipe/pose");
+        const pose = new Pose({
+          locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
+          }
+        });
+        pose.setOptions({
+          modelComplexity: 1,
+          smoothLandmarks: true,
+          enableSegmentation: false,
+          smoothSegmentation: false,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+        pose.onResults(handlePoseResults);
+        await pose.initialize();
+        setPoseDetector(pose);
+        setCameraError(null);
+      } catch (error) {
+        console.error("Error setting up camera/pose:", error);
+        let errorMessage = "An unknown error occurred during setup.";
+        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+          errorMessage = "Camera access denied. Please allow camera access and refresh the page.";
+        } else if (error.name === "NotFoundError") {
+          errorMessage = "No suitable camera found on your device.";
+        } else {
+          errorMessage = `Setup failed: ${error.message}. If permissions were granted, ensure no other application is using the camera.`;
+        }
+        setCameraError(errorMessage);
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+        }
+      }
+    };
+    setupCamera();
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [handlePoseResults]);
+  useEffect(() => {
+    if (cameraError) return;
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1e3);
+      return () => clearTimeout(timer);
+    } else if (countdown === 0 && !isRecording && poseDetector) {
+      startRecording();
+    }
+  }, [countdown, isRecording, poseDetector, cameraError]);
+  const startRecording = () => {
+    setIsRecording(true);
+    startTimeRef.current = Date.now();
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
+    }
+    detectPose();
+  };
+  const detectPose = async () => {
+    if (!isRecording || !videoRef.current || !poseDetector) return;
+    const currentTime = (Date.now() - startTimeRef.current) / 1e3;
+    if (currentTime >= audioDuration) {
+      stopRecording();
+      return;
+    }
+    try {
+      await poseDetector.send({ image: videoRef.current });
+    } catch (error) {
+      console.warn("Pose detection send error:", error);
+    }
+    animationFrameRef.current = requestAnimationFrame(detectPose);
+  };
   const stopRecording = () => {
     setIsRecording(false);
     if (animationFrameRef.current) {
@@ -155,107 +177,128 @@ const Capture = ({ audioUrl, audioDuration, onComplete, onBack }) => {
     /* @__PURE__ */ jsxDEV("div", { className: "capture-header", children: [
       /* @__PURE__ */ jsxDEV("button", { onClick: onBack, className: "back-btn", children: "\u2190 Back" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 181,
+        lineNumber: 203,
         columnNumber: 9
       }),
       /* @__PURE__ */ jsxDEV("h2", { children: "Recording" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 184,
+        lineNumber: 206,
         columnNumber: 9
       }),
       /* @__PURE__ */ jsxDEV("div", {}, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 185,
+        lineNumber: 207,
         columnNumber: 9
       })
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 180,
+      lineNumber: 202,
       columnNumber: 7
     }),
-    /* @__PURE__ */ jsxDEV("div", { className: "camera-container", children: [
-      /* @__PURE__ */ jsxDEV(
-        "video",
-        {
-          ref: videoRef,
-          style: { display: "none" },
-          playsInline: true,
-          muted: true
-        },
-        void 0,
-        false,
-        {
-          fileName: "<stdin>",
-          lineNumber: 189,
-          columnNumber: 9
-        }
-      ),
-      /* @__PURE__ */ jsxDEV(
-        "canvas",
-        {
-          ref: canvasRef,
-          width: 640,
-          height: 480,
-          className: "camera-canvas"
-        },
-        void 0,
-        false,
-        {
-          fileName: "<stdin>",
-          lineNumber: 195,
-          columnNumber: 9
-        }
-      ),
-      countdown > 0 && /* @__PURE__ */ jsxDEV("div", { className: "countdown-overlay", children: /* @__PURE__ */ jsxDEV("div", { className: "countdown-number", children: countdown }, void 0, false, {
+    cameraError ? /* @__PURE__ */ jsxDEV("div", { className: "error-message", children: [
+      /* @__PURE__ */ jsxDEV("p", { children: cameraError }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 204,
-        columnNumber: 13
-      }) }, void 0, false, {
-        fileName: "<stdin>",
-        lineNumber: 203,
+        lineNumber: 212,
         columnNumber: 11
       }),
-      isRecording && /* @__PURE__ */ jsxDEV("div", { className: "recording-indicator", children: [
-        /* @__PURE__ */ jsxDEV("span", { className: "rec-dot" }, void 0, false, {
+      /* @__PURE__ */ jsxDEV("button", { onClick: onBack, className: "secondary-btn", style: { marginTop: "1rem" }, children: "Go back" }, void 0, false, {
+        fileName: "<stdin>",
+        lineNumber: 213,
+        columnNumber: 11
+      })
+    ] }, void 0, true, {
+      fileName: "<stdin>",
+      lineNumber: 211,
+      columnNumber: 9
+    }) : /* @__PURE__ */ jsxDEV(Fragment, { children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "camera-container", children: [
+        /* @__PURE__ */ jsxDEV(
+          "video",
+          {
+            ref: videoRef,
+            style: { display: "none" },
+            playsInline: true,
+            muted: true
+          },
+          void 0,
+          false,
+          {
+            fileName: "<stdin>",
+            lineNumber: 220,
+            columnNumber: 13
+          }
+        ),
+        /* @__PURE__ */ jsxDEV(
+          "canvas",
+          {
+            ref: canvasRef,
+            width: 640,
+            height: 480,
+            className: "camera-canvas"
+          },
+          void 0,
+          false,
+          {
+            fileName: "<stdin>",
+            lineNumber: 226,
+            columnNumber: 13
+          }
+        ),
+        countdown > 0 && /* @__PURE__ */ jsxDEV("div", { className: "countdown-overlay", children: /* @__PURE__ */ jsxDEV("div", { className: "countdown-number", children: countdown }, void 0, false, {
           fileName: "<stdin>",
-          lineNumber: 210,
-          columnNumber: 13
+          lineNumber: 235,
+          columnNumber: 17
+        }) }, void 0, false, {
+          fileName: "<stdin>",
+          lineNumber: 234,
+          columnNumber: 15
         }),
-        "REC"
+        isRecording && /* @__PURE__ */ jsxDEV("div", { className: "recording-indicator", children: [
+          /* @__PURE__ */ jsxDEV("span", { className: "rec-dot" }, void 0, false, {
+            fileName: "<stdin>",
+            lineNumber: 241,
+            columnNumber: 17
+          }),
+          "REC"
+        ] }, void 0, true, {
+          fileName: "<stdin>",
+          lineNumber: 240,
+          columnNumber: 15
+        })
       ] }, void 0, true, {
         fileName: "<stdin>",
-        lineNumber: 209,
-        columnNumber: 11
-      })
-    ] }, void 0, true, {
-      fileName: "<stdin>",
-      lineNumber: 188,
-      columnNumber: 7
-    }),
-    /* @__PURE__ */ jsxDEV("audio", { ref: audioRef, src: audioUrl }, void 0, false, {
-      fileName: "<stdin>",
-      lineNumber: 216,
-      columnNumber: 7
-    }),
-    /* @__PURE__ */ jsxDEV("div", { className: "capture-info", children: [
-      /* @__PURE__ */ jsxDEV("p", { children: "Get ready! The music will start after countdown." }, void 0, false, {
-        fileName: "<stdin>",
         lineNumber: 219,
-        columnNumber: 9
+        columnNumber: 11
       }),
-      /* @__PURE__ */ jsxDEV("p", { children: "Move your body to the beat!" }, void 0, false, {
+      /* @__PURE__ */ jsxDEV("audio", { ref: audioRef, src: audioUrl }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 220,
-        columnNumber: 9
+        lineNumber: 247,
+        columnNumber: 11
+      }),
+      /* @__PURE__ */ jsxDEV("div", { className: "capture-info", children: [
+        /* @__PURE__ */ jsxDEV("p", { children: "Get ready! The music will start after countdown." }, void 0, false, {
+          fileName: "<stdin>",
+          lineNumber: 250,
+          columnNumber: 13
+        }),
+        /* @__PURE__ */ jsxDEV("p", { children: "Move your body to the beat!" }, void 0, false, {
+          fileName: "<stdin>",
+          lineNumber: 251,
+          columnNumber: 13
+        })
+      ] }, void 0, true, {
+        fileName: "<stdin>",
+        lineNumber: 249,
+        columnNumber: 11
       })
     ] }, void 0, true, {
       fileName: "<stdin>",
       lineNumber: 218,
-      columnNumber: 7
+      columnNumber: 9
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 179,
+    lineNumber: 201,
     columnNumber: 5
   });
 };

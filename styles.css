@@ -194,6 +194,23 @@ body {
   color: #aaa;
 }
 
+/* Add error message style */
+.error-message {
+  margin-top: 50px;
+  padding: 20px;
+  background: #331111;
+  border: 1px solid #ff4444;
+  border-radius: 8px;
+  max-width: 640px;
+  text-align: center;
+}
+
+.error-message p {
+  color: #ffcccc;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
 /* Preview Screen */
 .preview-screen {
   min-height: 100vh;
@@ -257,4 +274,3 @@ body {
     font-size: 6rem;
   }
 }
-
